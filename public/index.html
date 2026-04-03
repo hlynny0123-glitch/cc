@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A股资产追踪器</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header class="header">
+  <div class="header-left">
+    <span class="logo">📈</span>
+    <h1>A股资产追踪器</h1>
+    <span id="market-badge" class="badge badge-closed">休市</span>
+  </div>
+  <div class="header-right">
+    <span id="last-updated" class="text-muted">--</span>
+    <button id="btn-refresh" class="btn btn-ghost" onclick="app.refresh()">⟳ 刷新</button>
+    <button class="btn btn-primary" onclick="app.openAddStock()">+ 添加股票</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════ ALERT BANNER ═══════════════════════ -->
+<div id="alert-banner" class="alert-banner hidden"></div>
+
+<!-- ═══════════════════════ SUMMARY CARDS ═══════════════════════ -->
+<main class="container">
+  <section class="cards-grid">
+    <div class="card">
+      <div class="card-label">持仓总市值</div>
+      <div id="card-total-value" class="card-value">¥ --</div>
+      <div id="card-cost" class="card-sub text-muted">成本 ¥ --</div>
+    </div>
+    <div class="card">
+      <div class="card-label">今日盈亏</div>
+      <div id="card-today-pnl" class="card-value">¥ --</div>
+      <div id="card-today-pct" class="card-sub text-muted">-- %</div>
+    </div>
+    <div class="card">
+      <div class="card-label">累计盈亏</div>
+      <div id="card-total-pnl" class="card-value">¥ --</div>
+      <div id="card-total-pct" class="card-sub text-muted">-- %</div>
+    </div>
+    <div class="card card-goal">
+      <div class="card-label">股息目标进度 <span class="text-muted">/ ¥100,000</span></div>
+      <div id="card-div-total" class="card-value">¥ --</div>
+      <div class="progress-bar-wrap">
+        <div id="div-progress-bar" class="progress-bar" style="width:0%"></div>
+      </div>
+      <div id="card-div-remaining" class="card-sub text-muted">还差 ¥ --</div>
+    </div>
+    <div class="card">
+      <div class="card-label">预估本年股息（税后）</div>
+      <div id="card-est-div" class="card-value">¥ --</div>
+      <div id="card-est-div-sub" class="card-sub text-muted">-- 只股票已设置预期股息</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ PORTFOLIO TABLE ═══════════════════════ -->
+  <section class="section">
+    <div class="section-header">
+      <h2>持仓明细</h2>
+      <div class="section-actions">
+        <button class="btn btn-ghost btn-sm" onclick="app.exportPortfolioCSV()">↓ 导出CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="app.triggerImport('portfolio')">↑ 导入CSV</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>代码 / 名称</th>
+            <th class="num">现价</th>
+            <th class="num">涨跌幅</th>
+            <th class="num">持仓股数</th>
+            <th class="num">成本价</th>
+            <th class="num">持仓市值</th>
+            <th class="num">浮动盈亏</th>
+            <th class="num">今日盈亏</th>
+            <th class="num">年化股息率</th>
+            <th class="num">预估年股息</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="portfolio-tbody">
+          <tr id="empty-row">
+            <td colspan="10" class="empty-hint">暂无持仓，点击右上角「添加股票」开始追踪</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ CHARTS ROW ═══════════════════════ -->
+  <section class="charts-row">
+    <div class="chart-card">
+      <h3>持仓分布</h3>
+      <div class="chart-wrap"><canvas id="chart-pie"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3>股息收入（近12月）</h3>
+      <div class="chart-wrap"><canvas id="chart-div"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ NAV CHART ═══════════════════════ -->
+  <section class="chart-card">
+    <h3>资产净值曲线</h3>
+    <div class="chart-wrap chart-tall"><canvas id="chart-nav"></canvas></div>
+  </section>
+
+  <!-- ═══════════════════════ DIVIDEND SECTION ═══════════════════════ -->
+  <section class="section">
+    <div class="section-header">
+      <h2>股息记录</h2>
+      <div class="section-actions">
+        <button class="btn btn-ghost btn-sm" onclick="app.exportDividendsCSV()">↓ 导出CSV</button>
+        <button class="btn btn-ghost btn-sm" onclick="app.triggerImport('dividends')">↑ 导入CSV</button>
+        <button class="btn btn-ghost" onclick="app.openAddDividend()">+ 录入股息</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>股票</th>
+            <th class="num">除权日</th>
+            <th class="num">每股股息 (¥)</th>
+            <th class="num">持股数</th>
+            <th class="num">税后收入 (¥)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="dividend-tbody">
+          <tr id="div-empty-row">
+            <td colspan="6" class="empty-hint">暂无股息记录</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════ ALERT HISTORY ═══════════════════════ -->
+  <section class="section">
+    <div class="section-header">
+      <h2>预警记录</h2>
+      <button class="btn btn-ghost btn-sm" onclick="app.clearAlerts()">清除</button>
+    </div>
+    <div id="alert-list" class="alert-list">
+      <p class="empty-hint">暂无预警触发记录</p>
+    </div>
+  </section>
+</main>
+
+<!-- ═══════════════════════ ADD STOCK MODAL ═══════════════════════ -->
+<div id="modal-add-stock" class="modal-overlay hidden" onclick="app.closeModal('modal-add-stock')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>添加股票</h2>
+    <div class="form-group">
+      <label>搜索股票 <span class="text-muted">（名称或代码，如 茅台 或 600519）</span></label>
+      <div class="search-wrap">
+        <input id="inp-search-stock" type="text" class="input" placeholder="输入名称或代码…" autocomplete="off"
+               oninput="app.onStockSearch(this.value)" onkeydown="app.onSearchKeydown(event)" />
+        <div id="search-dropdown" class="search-dropdown hidden"></div>
+      </div>
+      <div id="selected-stock-badge" class="selected-badge hidden"></div>
+      <input type="hidden" id="inp-code" />
+    </div>
+    <div class="form-group">
+      <label>持股数量（股）</label>
+      <input id="inp-shares" type="number" class="input" placeholder="100" min="1" />
+    </div>
+    <div class="form-group">
+      <label>买入均价（¥）</label>
+      <input id="inp-cost" type="number" class="input" placeholder="1800.00" step="0.01" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-add-stock')">取消</button>
+      <button class="btn btn-primary" onclick="app.addStock()">确认添加</button>
+    </div>
+    <p id="add-stock-error" class="error-msg hidden"></p>
+  </div>
+</div>
+
+<!-- ═══════════════════════ EDIT STOCK MODAL ═══════════════════════ -->
+<div id="modal-edit-stock" class="modal-overlay hidden" onclick="app.closeModal('modal-edit-stock')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="edit-stock-title">编辑持仓</h2>
+    <input type="hidden" id="edit-stock-id" />
+    <div class="form-group">
+      <label>持股数量（股）</label>
+      <input id="inp-edit-shares" type="number" class="input" min="1" />
+    </div>
+    <div class="form-group">
+      <label>买入均价（¥）</label>
+      <input id="inp-edit-cost" type="number" class="input" step="0.01" />
+    </div>
+    <div class="form-group">
+      <label>预期年股息（每股，税前）<span class="text-muted">— 留空则不计入预估</span></label>
+      <div class="input-with-btn">
+        <input id="inp-edit-expected-div" type="number" class="input" placeholder="如 1.50" step="0.0001" min="0" />
+        <button class="btn btn-ghost btn-sm" id="btn-fetch-div" onclick="app.fetchExpectedDiv()">自动获取</button>
+      </div>
+      <div id="div-fetch-hint" class="fetch-hint hidden"></div>
+    </div>
+    <div class="form-group">
+      <label>股息适用税率</label>
+      <select id="inp-edit-tax-rate" class="input">
+        <option value="0.8">20%（持股&lt;1年）</option>
+        <option value="0.9">10%（持股1-3年）</option>
+        <option value="1.0" selected>0%（持股&gt;3年）</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-edit-stock')">取消</button>
+      <button class="btn btn-primary" onclick="app.saveEditStock()">保存</button>
+    </div>
+    <p id="edit-stock-error" class="error-msg hidden"></p>
+  </div>
+</div>
+
+<!-- ═══════════════════════ SET ALERT MODAL ═══════════════════════ -->
+<div id="modal-set-alert" class="modal-overlay hidden" onclick="app.closeModal('modal-set-alert')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="alert-stock-title">设置预警价</h2>
+    <input type="hidden" id="alert-stock-code" />
+    <p class="text-muted" style="font-size:12px;margin-bottom:16px;">价格触及预警线时弹出通知。留空则不设该方向预警。</p>
+    <div class="form-group">
+      <label>下限价（¥）—— 跌破时预警</label>
+      <input id="inp-alert-lower" type="number" class="input" placeholder="不设置则留空" step="0.01" />
+    </div>
+    <div class="form-group">
+      <label>上限价（¥）—— 涨破时预警</label>
+      <input id="inp-alert-upper" type="number" class="input" placeholder="不设置则留空" step="0.01" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.clearStockAlert(document.getElementById('alert-stock-code').value)">清除预警</button>
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-set-alert')">取消</button>
+      <button class="btn btn-primary" onclick="app.saveSetAlert()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ ADD DIVIDEND MODAL ═══════════════════════ -->
+<div id="modal-add-dividend" class="modal-overlay hidden" onclick="app.closeModal('modal-add-dividend')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>录入股息</h2>
+    <div class="form-group">
+      <label>选择股票</label>
+      <select id="inp-div-code" class="input"></select>
+    </div>
+    <div class="form-group">
+      <label>除权日</label>
+      <input id="inp-div-date" type="date" class="input" />
+    </div>
+    <div class="form-group">
+      <label>每股股息（¥，税前）</label>
+      <input id="inp-div-per-share" type="number" class="input" placeholder="0.50" step="0.0001" />
+    </div>
+    <div class="form-group">
+      <label>持股数量（股）</label>
+      <input id="inp-div-shares" type="number" class="input" placeholder="100" />
+    </div>
+    <p class="text-muted" style="font-size:12px;margin-top:-8px;">税后按持股时长自动扣税</p>
+    <div class="form-group">
+      <label>实际税率</label>
+      <select id="inp-div-tax" class="input">
+        <option value="0.8">20%（持股&lt;1年）</option>
+        <option value="0.9">10%（持股1-3年）</option>
+        <option value="1.0" selected>0%（持股&gt;3年）</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-add-dividend')">取消</button>
+      <button class="btn btn-primary" onclick="app.addDividend()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TOAST ═══════════════════════ -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- Hidden file input for CSV import -->
+<input type="file" id="import-file-input" accept=".csv" style="display:none" />
+
+<script src="app.js?v=4"></script>
+</body>
+</html>
