@@ -6,6 +6,18 @@ const path = require('path');
 const app = express();
 const PORT = 3000;
 
+// Basic auth middleware
+app.use((req, res, next) => {
+  const auth = req.headers['authorization'];
+  if (auth && auth.startsWith('Basic ')) {
+    const decoded = Buffer.from(auth.slice(6), 'base64').toString('utf8');
+    const [, password] = decoded.split(':');
+    if (password === '241216') return next();
+  }
+  res.set('WWW-Authenticate', 'Basic realm="A股追踪器"');
+  res.status(401).send('请输入密码');
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
