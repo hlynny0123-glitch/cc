@@ -14,7 +14,7 @@ app.use((req, res, next) => {
     const [, password] = decoded.split(':');
     if (password === '241216') return next();
   }
-  res.set('WWW-Authenticate', 'Basic realm="A股追踪器"');
+  res.set('WWW-Authenticate', 'Basic realm="A-Stock-Tracker"');
   res.status(401).send('请输入密码');
 });
 
