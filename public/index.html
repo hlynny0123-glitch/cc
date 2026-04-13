@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A股资产追踪器</title>
+  <title>Firenote</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -13,7 +13,7 @@
 <header class="header">
   <div class="header-left">
     <span class="logo">📈</span>
-    <h1>A股资产追踪器</h1>
+    <h1>Firenote</h1>
     <span id="market-badge" class="badge badge-closed">休市</span>
   </div>
   <div class="header-right">
@@ -141,6 +141,35 @@
         </tbody>
       </table>
     </div>
+  </section>
+
+  <!-- ═══════════════════════ WATCHLIST ═══════════════════════ -->
+  <section class="section">
+    <div class="section-header">
+      <h2>关注列表</h2>
+      <button class="btn btn-ghost" onclick="app.openAddWatch()">+ 添加关注</button>
+    </div>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>代码 / 名称</th>
+            <th class="num">现价</th>
+            <th class="num">涨跌幅</th>
+            <th class="num">每股年股息</th>
+            <th class="num">股息率</th>
+            <th class="num">模拟持股数</th>
+            <th class="num">模拟总资产</th>
+            <th class="num">预估年股息（税前）</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="watchlist-tbody">
+          <tr><td colspan="8" class="empty-hint">暂无关注股票，点击「添加关注」开始</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="watchlist-est-total" class="watchlist-summary hidden"></div>
   </section>
 
   <!-- ═══════════════════════ ALERT HISTORY ═══════════════════════ -->
@@ -280,12 +309,34 @@
   </div>
 </div>
 
+<!-- ═══════════════════════ ADD WATCH MODAL ═══════════════════════ -->
+<div id="modal-add-watch" class="modal-overlay hidden" onclick="app.closeModal('modal-add-watch')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>添加关注股票</h2>
+    <div class="form-group">
+      <label>搜索股票 <span class="text-muted">（名称或代码）</span></label>
+      <div class="search-wrap">
+        <input id="inp-search-watch" type="text" class="input" placeholder="输入名称或代码…" autocomplete="off"
+               oninput="app.onWatchSearch(this.value)" onkeydown="app.onWatchKeydown(event)" />
+        <div id="watch-search-dropdown" class="search-dropdown hidden"></div>
+      </div>
+      <div id="watch-selected-badge" class="selected-badge hidden"></div>
+      <input type="hidden" id="inp-watch-code" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-add-watch')">取消</button>
+      <button class="btn btn-primary" onclick="app.addWatch()">添加</button>
+    </div>
+    <p id="add-watch-error" class="error-msg hidden"></p>
+  </div>
+</div>
+
 <!-- ═══════════════════════ TOAST ═══════════════════════ -->
 <div id="toast-container" class="toast-container"></div>
 
 <!-- Hidden file input for CSV import -->
 <input type="file" id="import-file-input" accept=".csv" style="display:none" />
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>
