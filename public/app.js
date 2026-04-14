@@ -9,11 +9,13 @@ const DIVIDEND_GOAL   = 100000; // ¥100,000
 const REFRESH_MS      = 15000;  // 15s during market hours
 
 // ─── State ───────────────────────────────
-let portfolio    = [];   // { id, code, name, shares, costPrice, purchaseDate }
+let portfolio    = [];   // { id, code, name, shares, costPrice }
 let dividends    = [];   // { id, code, name, date, perShare, shares, taxRate, total }
 let alertLog     = [];   // { id, code, name, type, changePct, price, time }
 let priceAlerts  = {};   // code → { lower: number|null, upper: number|null }
 let navHistory   = [];   // [{ date, value, cost }]
+let watchlist    = [];   // { id, code, name, expectedDivPerShare, simShares }
+let etfList      = [];   // { id, code, name, divPerUnit, simUnits }
 let stockData    = {};   // code → Sina price object (live)
 let charts       = {};   // Chart.js instances
 let refreshTimer = null;
@@ -27,18 +29,22 @@ function loadState() {
     alertLog    = JSON.parse(localStorage.getItem('alertLog')    || '[]');
     priceAlerts = JSON.parse(localStorage.getItem('priceAlerts') || '{}');
     navHistory  = JSON.parse(localStorage.getItem('navHistory')  || '[]');
+    watchlist   = JSON.parse(localStorage.getItem('watchlist')   || '[]');
+    etfList     = JSON.parse(localStorage.getItem('etfList')     || '[]');
     // Restore today's already-fired alerts; discard previous days
     const today = todayStr();
     const saved = JSON.parse(localStorage.getItem('alreadyAlerted') || '[]');
     alreadyAlerted = new Set(saved.filter(k => k.startsWith(today)));
-  } catch { portfolio = []; dividends = []; alertLog = []; priceAlerts = {}; navHistory = []; }
+  } catch { portfolio = []; dividends = []; alertLog = []; priceAlerts = {}; navHistory = []; watchlist = []; etfList = []; }
 }
 function saveState() {
-  localStorage.setItem('portfolio',   JSON.stringify(portfolio));
-  localStorage.setItem('dividends',   JSON.stringify(dividends));
-  localStorage.setItem('alertLog',    JSON.stringify(alertLog));
-  localStorage.setItem('priceAlerts', JSON.stringify(priceAlerts));
-  localStorage.setItem('navHistory',  JSON.stringify(navHistory));
+  localStorage.setItem('portfolio',    JSON.stringify(portfolio));
+  localStorage.setItem('dividends',    JSON.stringify(dividends));
+  localStorage.setItem('alertLog',     JSON.stringify(alertLog));
+  localStorage.setItem('priceAlerts',  JSON.stringify(priceAlerts));
+  localStorage.setItem('navHistory',   JSON.stringify(navHistory));
+  localStorage.setItem('watchlist',    JSON.stringify(watchlist));
+  localStorage.setItem('etfList',      JSON.stringify(etfList));
   localStorage.setItem('alreadyAlerted', JSON.stringify([...alreadyAlerted]));
 }
 
@@ -69,7 +75,10 @@ function changeClass(n) {
 function normalizeCode(raw) {
   raw = raw.trim().toLowerCase().replace(/\s/g, '');
   if (/^(sh|sz)\d{6}$/.test(raw)) return raw;
-  if (/^\d{6}$/.test(raw)) return raw.startsWith('6') ? `sh${raw}` : `sz${raw}`;
+  if (/^\d{6}$/.test(raw)) {
+    // 5x/6x → Shanghai (stocks + ETFs); 0x/1x/2x/3x → Shenzhen
+    return (raw.startsWith('5') || raw.startsWith('6')) ? `sh${raw}` : `sz${raw}`;
+  }
   return null;
 }
 function nowBJ() { return new Date(Date.now() + 8 * 3600000); }
@@ -81,8 +90,9 @@ function todayStr() { return nowBJ().toISOString().slice(0, 10); }
 
 // ─── Stock Data Fetch ─────────────────────
 async function fetchStockData() {
-  if (!portfolio.length) return;
-  const codes = [...new Set(portfolio.map(p => p.code))].join(',');
+  const allCodes = [...new Set([...portfolio.map(p => p.code), ...watchlist.map(w => w.code), ...etfList.map(e => e.code)])];
+  if (!allCodes.length) return;
+  const codes = allCodes.join(',');
   try {
     const res = await fetch(`/api/stocks?codes=${codes}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -234,6 +244,8 @@ function renderAll() {
   renderSummaryCards();
   renderPortfolioTable();
   renderDividendTable();
+  renderWatchlistTable();
+  renderEtfTable();
   renderAlertList();
   renderAlertBanner();
   renderCharts();
@@ -375,21 +387,26 @@ function renderPieChart() {
     const info  = stockData[p.code];
     const value = info ? info.current * p.shares : p.costPrice * p.shares;
     return { label: info?.name || p.name || p.code, value };
-  }).filter(i => i.value > 0);
+  }).filter(i => i.value > 0).sort((a, b) => b.value - a.value);
 
   const COLORS = ['#58a6ff','#3fb950','#f85149','#bc8cff','#d29922','#39d353','#ff7b72','#a5d6ff'];
   if (charts.pie) charts.pie.destroy();
   charts.pie = new Chart(ctx, {
-    type: 'doughnut',
+    type: 'bar',
     data: {
       labels: items.map(i => i.label),
-      datasets: [{ data: items.map(i => i.value), backgroundColor: COLORS, borderWidth: 0 }],
+      datasets: [{ data: items.map(i => i.value), backgroundColor: COLORS, borderWidth: 0, borderRadius: 4 }],
     },
     options: {
+      indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { position: 'right', labels: { color: '#7d8590', font: { size: 11 }, boxWidth: 12 } },
+        legend: { display: false },
         tooltip: { callbacks: { label: ctx => ` ¥ ${fmt(ctx.raw)}` } },
+      },
+      scales: {
+        x: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 }, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
+        y: { grid: { color: '#21262d' }, ticks: { color: '#e6edf3', font: { size: 11 } } },
       },
     },
   });
@@ -885,6 +902,389 @@ function parseCSVLine(line) {
   return result;
 }
 
+// ─── Watchlist ────────────────────────────
+let _watchSearchTimer = null;
+let _watchSearchResults = [];
+let _watchSearchActiveIdx = -1;
+
+function renderWatchlistTable() {
+  const tbody = document.getElementById('watchlist-tbody');
+  const totalEl = document.getElementById('watchlist-est-total');
+  if (!watchlist.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-hint">暂无关注股票，点击「添加关注」开始</td></tr>';
+    totalEl.classList.add('hidden');
+    return;
+  }
+  let totalEst = 0;
+  tbody.innerHTML = watchlist.map(w => {
+    const info = stockData[w.code];
+    const price = info?.current ?? null;
+    const pct   = info?.changePct ?? null;
+    const div   = w.expectedDivPerShare;
+    const divYield  = price && div ? (div / price * 100) : null;
+    const estDiv    = div && w.simShares ? div * w.simShares : null;
+    const simAsset  = price && w.simShares ? price * w.simShares : null;
+    if (estDiv) totalEst += estDiv;
+    return `<tr>
+      <td>
+        <div class="stock-name">${w.name || w.code}</div>
+        <div class="stock-code">${w.code.toUpperCase()}</div>
+      </td>
+      <td class="num">${price ? fmt(price) : '--'}</td>
+      <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
+      <td class="num">${div ? fmt(div, 4) : '--'}</td>
+      <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '--'}</td>
+      <td class="num">
+        <input type="number" class="inline-input" value="${w.simShares || ''}"
+          placeholder="输入股数" min="100" step="100"
+          onchange="app.updateWatchShares('${w.id}', this.value)">
+      </td>
+      <td class="num">${simAsset != null ? fmtMoney(simAsset) : '--'}</td>
+      <td class="num">${estDiv != null ? fmtMoney(estDiv) : '--'}</td>
+      <td class="action-cell">
+        <button class="btn btn-ghost btn-sm" onclick="app.fetchWatchDiv('${w.id}')">${div ? '刷新股息' : '获取股息'}</button>
+        <button class="btn btn-danger btn-sm" onclick="app.removeWatch('${w.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  if (totalEst > 0) {
+    totalEl.textContent = `模拟持股预估年股息（税前）合计：${fmtMoney(totalEst)}`;
+    totalEl.classList.remove('hidden');
+  } else {
+    totalEl.classList.add('hidden');
+  }
+}
+
+function openAddWatch() {
+  document.getElementById('add-watch-error').classList.add('hidden');
+  document.getElementById('inp-search-watch').value = '';
+  document.getElementById('inp-watch-code').value = '';
+  document.getElementById('watch-selected-badge').classList.add('hidden');
+  closeWatchDropdown();
+  openModal('modal-add-watch');
+  document.getElementById('inp-search-watch').focus();
+}
+
+async function addWatch() {
+  const hiddenCode  = document.getElementById('inp-watch-code').value.trim();
+  const searchInput = document.getElementById('inp-search-watch').value.trim();
+  const rawCode     = hiddenCode || searchInput;
+  const errEl       = document.getElementById('add-watch-error');
+  errEl.classList.add('hidden');
+
+  const code = normalizeCode(rawCode);
+  if (!code) return showError(errEl, '请搜索并选择股票，或直接输入6位代码（如 600519）');
+  if (watchlist.some(w => w.code === code)) return showError(errEl, '该股票已在关注列表中');
+
+  let name = '';
+  try {
+    const res = await fetch(`/api/stocks?codes=${code}`);
+    const data = await res.json();
+    name = data[code]?.name || '';
+  } catch { /* name stays empty */ }
+
+  const newItem = { id: uid(), code, name, expectedDivPerShare: null, simShares: null };
+  watchlist.push(newItem);
+  saveState();
+  closeModal('modal-add-watch');
+  ['inp-watch-code', 'inp-search-watch'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('watch-selected-badge').classList.add('hidden');
+  showToast(`已添加 ${name || code}，正在获取股息…`, 'info');
+
+  // Auto-fetch dividend
+  try {
+    const res = await fetch(`/api/dividend/${code}`);
+    const data = await res.json();
+    if (data.perShare != null) {
+      newItem.expectedDivPerShare = data.perShare;
+      saveState();
+      showToast(`${name || code} 股息已获取：每股 ¥${data.perShare}`, 'info');
+    }
+  } catch { /* silent */ }
+
+  await fetchStockData();
+}
+
+async function fetchWatchDiv(id) {
+  const w = watchlist.find(w => w.id === id);
+  if (!w) return;
+  try {
+    const res = await fetch(`/api/dividend/${w.code}`);
+    const data = await res.json();
+    if (data.perShare != null) {
+      w.expectedDivPerShare = data.perShare;
+      saveState();
+      renderWatchlistTable();
+      showToast(`${w.name || w.code} 股息已更新：每股 ¥${data.perShare}`, 'info');
+    } else {
+      showToast(`${w.name || w.code} 未查到分红记录`, 'info');
+    }
+  } catch {
+    showToast('获取股息失败', 'error');
+  }
+}
+
+function removeWatch(id) {
+  if (!confirm('确认从关注列表移除？')) return;
+  watchlist = watchlist.filter(w => w.id !== id);
+  saveState();
+  renderWatchlistTable();
+}
+
+function updateWatchShares(id, val) {
+  const w = watchlist.find(w => w.id === id);
+  if (!w) return;
+  w.simShares = parseInt(val) || null;
+  saveState();
+  renderWatchlistTable();
+}
+
+function onWatchSearch(val) {
+  document.getElementById('inp-watch-code').value = '';
+  document.getElementById('watch-selected-badge').classList.add('hidden');
+  clearTimeout(_watchSearchTimer);
+  const q = val.trim();
+  if (!q) { closeWatchDropdown(); return; }
+  if (/^(sh|sz)?\d{6}$/.test(q.replace(/\s/g, ''))) { closeWatchDropdown(); return; }
+  _watchSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      _watchSearchResults = await res.json();
+      renderWatchDropdown();
+    } catch { closeWatchDropdown(); }
+  }, 280);
+}
+
+function renderWatchDropdown() {
+  const dd = document.getElementById('watch-search-dropdown');
+  if (!_watchSearchResults.length) { closeWatchDropdown(); return; }
+  _watchSearchActiveIdx = -1;
+  dd.innerHTML = _watchSearchResults.map((r, i) =>
+    `<div class="search-item" data-idx="${i}" onmousedown="app.selectWatchResult(${i})">
+      <span class="si-name">${r.name}</span>
+      <span class="si-code">${r.code.toUpperCase()}</span>
+    </div>`
+  ).join('');
+  dd.classList.remove('hidden');
+}
+
+function closeWatchDropdown() {
+  document.getElementById('watch-search-dropdown').classList.add('hidden');
+  _watchSearchResults = [];
+  _watchSearchActiveIdx = -1;
+}
+
+function selectWatchResult(idx) {
+  const r = _watchSearchResults[idx];
+  if (!r) return;
+  document.getElementById('inp-search-watch').value = r.name;
+  document.getElementById('inp-watch-code').value = r.code;
+  const badge = document.getElementById('watch-selected-badge');
+  badge.textContent = `✓ ${r.name}  ${r.code.toUpperCase()}`;
+  badge.classList.remove('hidden');
+  closeWatchDropdown();
+}
+
+function onWatchKeydown(e) {
+  const dd = document.getElementById('watch-search-dropdown');
+  if (dd.classList.contains('hidden')) return;
+  const items = dd.querySelectorAll('.search-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _watchSearchActiveIdx = Math.min(_watchSearchActiveIdx + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _watchSearchActiveIdx = Math.max(_watchSearchActiveIdx - 1, 0);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (_watchSearchActiveIdx >= 0) selectWatchResult(_watchSearchActiveIdx);
+    return;
+  } else if (e.key === 'Escape') {
+    closeWatchDropdown();
+  }
+  items.forEach((el, i) => el.classList.toggle('active', i === _watchSearchActiveIdx));
+}
+
+// ─── ETF List ─────────────────────────────
+let _etfSearchTimer = null;
+let _etfSearchResults = [];
+let _etfSearchActiveIdx = -1;
+
+function renderEtfTable() {
+  const tbody = document.getElementById('etf-tbody');
+  const totalEl = document.getElementById('etf-est-total');
+  if (!etfList.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-hint">暂无ETF，点击「添加ETF」开始</td></tr>';
+    totalEl.classList.add('hidden');
+    return;
+  }
+  let totalEst = 0;
+  tbody.innerHTML = etfList.map(e => {
+    const info = stockData[e.code];
+    const price = info?.current ?? null;
+    const pct   = info?.changePct ?? null;
+    const div   = e.divPerUnit;
+    const divYield = price && div ? (div / price * 100) : null;
+    const simAsset = price && e.simUnits ? price * e.simUnits : null;
+    const estDiv   = div && e.simUnits ? div * e.simUnits : null;
+    if (estDiv) totalEst += estDiv;
+    return `<tr>
+      <td>
+        <div class="stock-name">${e.name || e.code}</div>
+        <div class="stock-code">${e.code.toUpperCase()}</div>
+      </td>
+      <td class="num">${price ? fmt(price) : '--'}</td>
+      <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
+      <td class="num">
+        <input type="number" class="inline-input" value="${div || ''}"
+          placeholder="每份分红" step="0.0001" min="0"
+          onchange="app.updateEtfDiv('${e.id}', this.value)">
+      </td>
+      <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '--'}</td>
+      <td class="num">
+        <input type="number" class="inline-input" value="${e.simUnits || ''}"
+          placeholder="份数" min="100" step="100"
+          onchange="app.updateEtfUnits('${e.id}', this.value)">
+      </td>
+      <td class="num">${simAsset != null ? fmtMoney(simAsset) : '--'}</td>
+      <td class="num">${estDiv != null ? fmtMoney(estDiv) : '--'}</td>
+      <td class="action-cell">
+        <button class="btn btn-danger btn-sm" onclick="app.removeEtf('${e.id}')">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+  if (totalEst > 0) {
+    totalEl.textContent = `模拟持有预估年分红合计：${fmtMoney(totalEst)}`;
+    totalEl.classList.remove('hidden');
+  } else {
+    totalEl.classList.add('hidden');
+  }
+}
+
+function openAddEtf() {
+  document.getElementById('add-etf-error').classList.add('hidden');
+  document.getElementById('inp-search-etf').value = '';
+  document.getElementById('inp-etf-code').value = '';
+  document.getElementById('etf-selected-badge').classList.add('hidden');
+  closeEtfDropdown();
+  openModal('modal-add-etf');
+  document.getElementById('inp-search-etf').focus();
+}
+
+async function addEtf() {
+  const hiddenCode  = document.getElementById('inp-etf-code').value.trim();
+  const searchInput = document.getElementById('inp-search-etf').value.trim();
+  const rawCode     = hiddenCode || searchInput;
+  const errEl       = document.getElementById('add-etf-error');
+  errEl.classList.add('hidden');
+
+  const code = normalizeCode(rawCode);
+  if (!code) return showError(errEl, '请搜索并选择ETF，或直接输入6位代码（如 510300）');
+  if (etfList.some(e => e.code === code)) return showError(errEl, '该ETF已在列表中');
+
+  let name = '';
+  try {
+    const res = await fetch(`/api/stocks?codes=${code}`);
+    const data = await res.json();
+    name = data[code]?.name || '';
+  } catch { /* name stays empty */ }
+
+  etfList.push({ id: uid(), code, name, divPerUnit: null, simUnits: null });
+  saveState();
+  closeModal('modal-add-etf');
+  showToast(`已添加 ${name || code}`, 'info');
+  await fetchStockData();
+}
+
+function removeEtf(id) {
+  if (!confirm('确认从ETF列表移除？')) return;
+  etfList = etfList.filter(e => e.id !== id);
+  saveState();
+  renderEtfTable();
+}
+
+function updateEtfDiv(id, val) {
+  const e = etfList.find(e => e.id === id);
+  if (!e) return;
+  e.divPerUnit = parseFloat(val) || null;
+  saveState();
+  renderEtfTable();
+}
+
+function updateEtfUnits(id, val) {
+  const e = etfList.find(e => e.id === id);
+  if (!e) return;
+  e.simUnits = parseInt(val) || null;
+  saveState();
+  renderEtfTable();
+}
+
+function onEtfSearch(val) {
+  document.getElementById('inp-etf-code').value = '';
+  document.getElementById('etf-selected-badge').classList.add('hidden');
+  clearTimeout(_etfSearchTimer);
+  const q = val.trim();
+  if (!q) { closeEtfDropdown(); return; }
+  if (/^(sh|sz)?\d{6}$/.test(q.replace(/\s/g, ''))) { closeEtfDropdown(); return; }
+  _etfSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      _etfSearchResults = await res.json();
+      renderEtfDropdown();
+    } catch { closeEtfDropdown(); }
+  }, 280);
+}
+
+function renderEtfDropdown() {
+  const dd = document.getElementById('etf-search-dropdown');
+  if (!_etfSearchResults.length) { closeEtfDropdown(); return; }
+  _etfSearchActiveIdx = -1;
+  dd.innerHTML = _etfSearchResults.map((r, i) =>
+    `<div class="search-item" data-idx="${i}" onmousedown="app.selectEtfResult(${i})">
+      <span class="si-name">${r.name}</span>
+      <span class="si-code">${r.code.toUpperCase()}</span>
+    </div>`
+  ).join('');
+  dd.classList.remove('hidden');
+}
+
+function closeEtfDropdown() {
+  document.getElementById('etf-search-dropdown').classList.add('hidden');
+  _etfSearchResults = [];
+  _etfSearchActiveIdx = -1;
+}
+
+function selectEtfResult(idx) {
+  const r = _etfSearchResults[idx];
+  if (!r) return;
+  document.getElementById('inp-search-etf').value = r.name;
+  document.getElementById('inp-etf-code').value = r.code;
+  const badge = document.getElementById('etf-selected-badge');
+  badge.textContent = `✓ ${r.name}  ${r.code.toUpperCase()}`;
+  badge.classList.remove('hidden');
+  closeEtfDropdown();
+}
+
+function onEtfKeydown(e) {
+  const dd = document.getElementById('etf-search-dropdown');
+  if (dd.classList.contains('hidden')) return;
+  const items = dd.querySelectorAll('.search-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _etfSearchActiveIdx = Math.min(_etfSearchActiveIdx + 1, items.length - 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _etfSearchActiveIdx = Math.max(_etfSearchActiveIdx - 1, 0);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (_etfSearchActiveIdx >= 0) selectEtfResult(_etfSearchActiveIdx);
+    return;
+  } else if (e.key === 'Escape') {
+    closeEtfDropdown();
+  }
+  items.forEach((el, i) => el.classList.toggle('active', i === _etfSearchActiveIdx));
+}
+
 // ─── Alert history clear ──────────────────
 function clearAlerts() {
   if (!confirm('清除所有预警记录？')) return;
@@ -942,6 +1342,22 @@ const app = {
   exportPortfolioCSV,
   exportDividendsCSV,
   triggerImport,
+  openAddWatch,
+  addWatch,
+  removeWatch,
+  updateWatchShares,
+  fetchWatchDiv,
+  onWatchSearch,
+  onWatchKeydown,
+  selectWatchResult,
+  openAddEtf,
+  addEtf,
+  removeEtf,
+  updateEtfDiv,
+  updateEtfUnits,
+  onEtfSearch,
+  onEtfKeydown,
+  selectEtfResult,
 };
 
 // ─── Bootstrap ────────────────────────────

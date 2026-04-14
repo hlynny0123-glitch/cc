@@ -8,7 +8,8 @@
       "Bash(curl -s \"http://localhost:3000/api/search?q=茅台\")",
       "Bash(cmd /c \"netstat -ano | findstr :3000\")",
       "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep 2; Set-Location ''D:\\\\Users\\\\lingyaohu\\\\Documents\\\\CC''; Start-Process node -ArgumentList ''server.js'' -NoNewWindow\")",
-      "Bash(curl -s \"http://localhost:3000/api/search?q=%E8%8C%85%E5%8F%B0\")"
+      "Bash(curl -s \"http://localhost:3000/api/search?q=%E8%8C%85%E5%8F%B0\")",
+      "WebSearch"
     ]
   }
 }

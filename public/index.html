@@ -172,6 +172,35 @@
     <div id="watchlist-est-total" class="watchlist-summary hidden"></div>
   </section>
 
+  <!-- ═══════════════════════ ETF LIST ═══════════════════════ -->
+  <section class="section">
+    <div class="section-header">
+      <h2>ETF 关注</h2>
+      <button class="btn btn-ghost" onclick="app.openAddEtf()">+ 添加ETF</button>
+    </div>
+    <div class="table-wrap">
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>代码 / 名称</th>
+            <th class="num">现价</th>
+            <th class="num">涨跌幅</th>
+            <th class="num">年分红/份</th>
+            <th class="num">股息率</th>
+            <th class="num">模拟份数</th>
+            <th class="num">模拟总资产</th>
+            <th class="num">预估年分红</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="etf-tbody">
+          <tr><td colspan="9" class="empty-hint">暂无ETF，点击「添加ETF」开始</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="etf-est-total" class="watchlist-summary hidden"></div>
+  </section>
+
   <!-- ═══════════════════════ ALERT HISTORY ═══════════════════════ -->
   <section class="section">
     <div class="section-header">
@@ -331,12 +360,34 @@
   </div>
 </div>
 
+<!-- ═══════════════════════ ADD ETF MODAL ═══════════════════════ -->
+<div id="modal-add-etf" class="modal-overlay hidden" onclick="app.closeModal('modal-add-etf')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2>添加ETF</h2>
+    <div class="form-group">
+      <label>搜索ETF <span class="text-muted">（名称或代码，如 沪深300 或 510300）</span></label>
+      <div class="search-wrap">
+        <input id="inp-search-etf" type="text" class="input" placeholder="输入名称或代码…" autocomplete="off"
+               oninput="app.onEtfSearch(this.value)" onkeydown="app.onEtfKeydown(event)" />
+        <div id="etf-search-dropdown" class="search-dropdown hidden"></div>
+      </div>
+      <div id="etf-selected-badge" class="selected-badge hidden"></div>
+      <input type="hidden" id="inp-etf-code" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="app.closeModal('modal-add-etf')">取消</button>
+      <button class="btn btn-primary" onclick="app.addEtf()">添加</button>
+    </div>
+    <p id="add-etf-error" class="error-msg hidden"></p>
+  </div>
+</div>
+
 <!-- ═══════════════════════ TOAST ═══════════════════════ -->
 <div id="toast-container" class="toast-container"></div>
 
 <!-- Hidden file input for CSV import -->
 <input type="file" id="import-file-input" accept=".csv" style="display:none" />
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

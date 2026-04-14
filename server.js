@@ -115,8 +115,8 @@ function normalizeCode(raw) {
   raw = raw.trim().toLowerCase();
   if (/^(sh|sz)\d{6}$/.test(raw)) return raw;
   if (/^\d{6}$/.test(raw)) {
-    // 6x = Shanghai, 0x/3x = Shenzhen
-    return raw.startsWith('6') ? `sh${raw}` : `sz${raw}`;
+    // 5x/6x = Shanghai (stocks + ETFs); 0x/1x/2x/3x = Shenzhen
+    return (raw.startsWith('5') || raw.startsWith('6')) ? `sh${raw}` : `sz${raw}`;
   }
   return null;
 }

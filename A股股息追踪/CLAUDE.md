@@ -11,6 +11,36 @@ node server.js     # starts on http://localhost:3000
 
 No build step, no tests, no linter. Restart the Node process after any `server.js` change. Frontend changes (`public/`) take effect on browser refresh with no restart. After editing `app.js`, bump the `?v=N` query string on the `<script src="app.js?v=N">` tag in `index.html` to bust the browser cache.
 
+## Repository & Deployment
+
+- **Gitee (code backup)**: `https://gitee.com/hlynny0123/cc` (private repo)
+- **GitHub**: `https://github.com/hlynny0123-glitch/cc` (private repo)
+- **Live site**: `http://124.223.101.230:3000` — 腾讯云轻量应用服务器，上海二区，2核2G，Node.js 镜像
+
+### Push code changes (local → Gitee + GitHub)
+```bash
+git add .
+git commit -m "描述改动"
+git push origin master        # Gitee
+git push github master        # GitHub
+```
+
+### Deploy updates to server
+SSH into server via 腾讯云 OrcaTerm, then:
+```bash
+cd /root/cc
+git pull
+pm2 restart cc
+```
+
+### Server management
+- pm2 keeps `server.js` running 24/7 and auto-restarts on crash
+- To check status: `pm2 status`
+- To view logs: `pm2 logs cc`
+
+### Data persistence note
+All user data (portfolio, dividends, watchlist, alerts) is stored in **browser localStorage only**. It does NOT sync between devices or browsers. To migrate data between browsers, use the export/import CSV feature, or copy localStorage via the browser console.
+
 ## Architecture
 
 **Two-layer architecture: Express proxy + vanilla JS SPA.**
@@ -42,19 +72,32 @@ All HTML `onclick` handlers call `app.functionName()`. The global `const app = {
 - `navHistory` — `[{date, value, cost}]` — daily snapshots, max 365 entries, updated on each quote fetch
 - `alertLog` — triggered alert history (both ±2% change alerts and custom price alerts)
 - `alreadyAlerted` — persisted Set of alert keys already fired today; auto-cleared on new day
+- `watchlist` — `{id, code, name, expectedDivPerShare, simShares}` — stocks under observation (not held)
 - `stockData` — live quote cache (not persisted, rebuilt on each fetch)
 
 **Rendering** is always full: `renderAll()` calls all sub-renderers. There is no partial/incremental update. Charts use Chart.js loaded from CDN — the TypeScript language server will flag `Chart` as unknown; this is a false positive.
 
-**Stock search autocomplete**: `onStockSearch()` debounces 280ms then calls `/api/search`. Results render in `#search-dropdown`. On selection, `selectSearchResult()` stores the exchange-prefixed code in the hidden `#inp-code` field and shows a confirmation badge. `addStock()` reads from `#inp-code` first, falling back to the raw text in `#inp-search-stock` (which normalizeCode can handle if a plain 6-digit code was typed).
+**Stock search autocomplete**: used in both "添加股票" (portfolio) and "添加关注" (watchlist) modals. Both use the same `/api/search` endpoint but separate state variables (`_searchResults` / `_watchSearchResults`). On selection, the exchange-prefixed code is stored in a hidden input field and a confirmation badge is shown.
 
-**Dividend auto-fetch flow**: clicking "自动获取" in the edit modal calls `/api/dividend/:code`, immediately saves `expectedDivPerShare` to the portfolio item, and auto-imports any new `distributions` entries into the `dividends` array (skipping duplicates by code+date). This means the user does not need to click "保存" for the dividend fetch to take effect.
+**Dividend auto-fetch flow**: clicking "自动获取" in the edit modal calls `/api/dividend/:code`, immediately saves `expectedDivPerShare` to the portfolio item, and auto-imports any new `distributions` entries into the `dividends` array (skipping duplicates by code+date). The user does not need to click "保存" for the fetch to take effect. Same logic applies when adding a watchlist stock — dividend is fetched automatically on add.
 
 **Dividend estimate vs historical yield**:
-- `预估年股息` column: `expectedDivPerShare × shares × expectedTaxRate` — forward-looking estimate set via auto-fetch or manual input.
-- `年化股息率` column: primarily calculated from actual `dividends` records in the last 12 months. Falls back to `expectedDivPerShare / currentPrice × 100` when no historical records exist.
+- `预估年股息` column: `expectedDivPerShare × shares × expectedTaxRate` — forward-looking estimate.
+- `年化股息率` column: calculated from actual `dividends` records in the last 12 months. Falls back to `expectedDivPerShare / currentPrice × 100` when no historical records exist.
 
-**Price alert deduplication**: alert keys use the format `${todayStr()}_${code}_pct|upper|lower`. `alreadyAlerted` is persisted to localStorage and filtered to today's date on load. Each alert condition fires at most once per day per stock, surviving page reloads within the same day.
+**Price alert deduplication**: alert keys use the format `${todayStr()}_${code}_pct|upper|lower`. `alreadyAlerted` is persisted to localStorage and filtered to today's date on load. Each alert condition fires at most once per day per stock, surviving page reloads.
+
+**`fetchStockData()`** fetches quotes for both `portfolio` and `watchlist` codes in one request.
+
+## Page Sections
+
+1. **Summary cards** — 总市值, 今日盈亏, 累计盈亏, 股息目标进度, 预估本年股息
+2. **持仓明细** — portfolio table with columns: 代码/名称, 现价, 涨跌幅, 持仓股数, 成本价, 持仓市值, 浮动盈亏, 今日盈亏, 年化股息率, 预估年股息, 操作
+3. **Charts row** — 持仓分布 (horizontal bar chart, sorted by value desc), 股息收入近12月 (bar)
+4. **资产净值曲线** — line chart from navHistory
+5. **关注列表** — watchlist table with columns: 代码/名称, 现价, 涨跌幅, 每股年股息, 股息率, 模拟持股数 (inline editable), 模拟总资产 (price × simShares), 预估年股息, 操作; bottom summary shows total simulated dividend
+6. **股息记录** — historical dividend entries, import/export CSV
+7. **预警记录** — alert log
 
 ## Stock Code Conventions
 
@@ -64,4 +107,4 @@ Exchange prefix is required everywhere internally: `sh` for Shanghai (6-digit co
 
 Scrapes `https://basic.10jqka.com.cn/{code6}/bonus.html` (GBK, same 6-digit code for both SH and SZ). The page server-renders dividend rows as `<tr class="J_pageritem">`. Only rows containing `实施方案` (completed distributions) are processed. The per-share amount is extracted from a cell matching `10派X元(含税)` (e.g. `10派239.57元` → ¥23.957/share). The ex-dividend date is the second-to-last `YYYY-MM-DD` value in the row's cells. Distributions within the last 12 months are collected into the `distributions` array and summed for `perShare`; if none qualify, the most recent single record is used as fallback.
 
-**Do not attempt EastMoney's datacenter JSON API** (`datacenter.eastmoney.com/securities/api/data/v1/get`). All `reportName` values for dividend data (`RPT_SHAREHOLDER_DIVIDEND_RET`, `RPT_F10_FH`, `RPT_FHPG_*`, etc.) return `{"success":false,"code":9501}`. This was extensively investigated and is a dead end.
+**Do not attempt EastMoney's datacenter JSON API** (`datacenter.eastmoney.com/securities/api/data/v1/get`). All `reportName` values for dividend data return `{"success":false,"code":9501}`. This was extensively investigated and is a dead end.
