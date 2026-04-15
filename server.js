@@ -244,8 +244,85 @@ app.get('/api/dividend/:code', (req, res) => {
       }
     });
   });
-  request.on('error', () => res.json({ perShare: null }));
-  request.setTimeout(8000, () => { request.destroy(); res.json({ perShare: null }); });
+  request.on('error', () => { if (!res.headersSent) res.json({ perShare: null }); });
+  request.setTimeout(8000, () => { request.destroy(); if (!res.headersSent) res.json({ perShare: null }); });
+});
+
+// GET /api/etf-dividend/:code — scrapes EastMoney fund F10 for ETF distributions
+app.get('/api/etf-dividend/:code', (req, res) => {
+  const code6 = req.params.code.replace(/^(sh|sz)/i, '').slice(0, 6);
+  if (!/^\d{6}$/.test(code6)) return res.status(400).json({ error: 'Invalid code' });
+
+  const options = {
+    hostname: 'fundf10.eastmoney.com',
+    path: `/fhsp_${code6}.html`,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Referer': 'https://fundf10.eastmoney.com/',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+    timeout: 8000,
+  };
+
+  const request = https.request(options, (response) => {
+    const chunks = [];
+    response.on('data', c => chunks.push(c));
+    response.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8');
+
+        // Parse individual distribution table rows
+        // Row format: <tr><td>2026年</td><td>登记日</td><td>除息日</td><td>每份派现金0.1230元</td><td>发放日</td></tr>
+        const recentDists = [];
+        const cutoff = new Date(Date.now() - 365 * 24 * 3600000);
+        let latestDate = null;
+
+        const rowRe = /<tr[^>]*>([\s\S]*?)<\/tr>/g;
+        let rowMatch;
+        while ((rowMatch = rowRe.exec(text)) !== null) {
+          const cells = [...rowMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)]
+            .map(c => c[1].replace(/<[^>]+>/g, '').trim());
+          const amtCell = cells.find(c => /每份派现金[\d.]+元/.test(c));
+          const dateCell = cells.find(c => /^\d{4}-\d{2}-\d{2}$/.test(c));
+          if (!amtCell || !dateCell) continue;
+          const amtM = amtCell.match(/每份派现金([\d.]+)元/);
+          if (!amtM) continue;
+          const perShareAmt = parseFloat(amtM[1]);
+          if (new Date(dateCell) >= cutoff) {
+            recentDists.push({ perShare: perShareAmt, date: dateCell });
+            if (!latestDate) latestDate = dateCell;
+          }
+        }
+
+        // Fallback: annual cumulative label "2026年度 ...累计分红0.123元/份"
+        // Use .*? to allow HTML tags between 年度 and 累计分红
+        let bestPerUnit = null, bestYear = 0;
+        const yearDivRe = /(\d{4})年度.*?累计分红([\d.]+)元\/份/g;
+        let m;
+        while ((m = yearDivRe.exec(text)) !== null) {
+          const yr = parseInt(m[1]);
+          const val = parseFloat(m[2]);
+          if (yr > bestYear) { bestYear = yr; bestPerUnit = val; }
+        }
+
+        // Prefer table sum; fall back to annual label
+        let perShare = null;
+        if (recentDists.length) {
+          perShare = parseFloat(recentDists.reduce((s, d) => s + d.perShare, 0).toFixed(4));
+        } else if (bestPerUnit != null) {
+          perShare = bestPerUnit;
+        }
+
+        res.json({ perShare, latestDate, count: recentDists.length || (perShare ? 1 : 0), distributions: recentDists });
+      } catch (e) {
+        res.json({ perShare: null });
+      }
+    });
+  });
+  request.on('error', () => { if (!res.headersSent) res.json({ perShare: null }); });
+  request.setTimeout(8000, () => { request.destroy(); if (!res.headersSent) res.json({ perShare: null }); });
+  request.end();
 });
 
 // GET /api/stocks?codes=600519,sh000001
