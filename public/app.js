@@ -1136,9 +1136,12 @@ function renderEtfTable() {
       <td class="num">${price ? fmt(price) : '--'}</td>
       <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
       <td class="num">
-        <input type="number" class="inline-input" value="${div || ''}"
-          placeholder="每份分红" step="0.0001" min="0"
-          onchange="app.updateEtfDiv('${e.id}', this.value)">
+        <div class="input-with-btn">
+          <input type="number" class="inline-input" value="${div || ''}"
+            placeholder="每份分红" step="0.0001" min="0"
+            onchange="app.updateEtfDiv('${e.id}', this.value)">
+          <button class="btn btn-ghost btn-sm" onclick="app.fetchEtfDiv('${e.id}')">获取</button>
+        </div>
       </td>
       <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '--'}</td>
       <td class="num">
@@ -1189,10 +1192,23 @@ async function addEtf() {
     name = data[code]?.name || '';
   } catch { /* name stays empty */ }
 
-  etfList.push({ id: uid(), code, name, divPerUnit: null, simUnits: null });
+  const newEtf = { id: uid(), code, name, divPerUnit: null, simUnits: null };
+  etfList.push(newEtf);
   saveState();
   closeModal('modal-add-etf');
-  showToast(`已添加 ${name || code}`, 'info');
+  showToast(`已添加 ${name || code}，正在获取分红数据…`, 'info');
+
+  // Auto-fetch ETF dividend
+  try {
+    const res = await fetch(`/api/etf-dividend/${code}`);
+    const data = await res.json();
+    if (data.perShare != null) {
+      newEtf.divPerUnit = data.perShare;
+      saveState();
+      showToast(`${name || code} 分红已获取：每份 ¥${data.perShare}`, 'info');
+    }
+  } catch { /* silent */ }
+
   await fetchStockData();
 }
 
@@ -1201,6 +1217,26 @@ function removeEtf(id) {
   etfList = etfList.filter(e => e.id !== id);
   saveState();
   renderEtfTable();
+}
+
+async function fetchEtfDiv(id) {
+  const e = etfList.find(e => e.id === id);
+  if (!e) return;
+  showToast(`正在获取 ${e.name || e.code} 分红数据…`, 'info', 2000);
+  try {
+    const res = await fetch(`/api/etf-dividend/${e.code}`);
+    const data = await res.json();
+    if (data.perShare != null) {
+      e.divPerUnit = data.perShare;
+      saveState();
+      renderEtfTable();
+      showToast(`${e.name || e.code} 分红已更新：每份 ¥${data.perShare}`, 'info');
+    } else {
+      showToast(`${e.name || e.code} 未查到分红记录，请手动填写`, 'info');
+    }
+  } catch {
+    showToast('获取失败，请手动填写', 'error');
+  }
 }
 
 function updateEtfDiv(id, val) {
@@ -1353,6 +1389,7 @@ const app = {
   openAddEtf,
   addEtf,
   removeEtf,
+  fetchEtfDiv,
   updateEtfDiv,
   updateEtfUnits,
   onEtfSearch,
