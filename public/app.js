@@ -1136,12 +1136,9 @@ function renderEtfTable() {
       <td class="num">${price ? fmt(price) : '--'}</td>
       <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
       <td class="num">
-        <div class="input-with-btn">
-          <input type="number" class="inline-input" value="${div || ''}"
-            placeholder="每份分红" step="0.0001" min="0"
-            onchange="app.updateEtfDiv('${e.id}', this.value)">
-          <button class="btn btn-ghost btn-sm" onclick="app.fetchEtfDiv('${e.id}')">获取</button>
-        </div>
+        <input type="number" class="inline-input" value="${div || ''}"
+          placeholder="每份分红" step="0.0001" min="0"
+          onchange="app.updateEtfDiv('${e.id}', this.value)">
       </td>
       <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '--'}</td>
       <td class="num">
@@ -1152,6 +1149,7 @@ function renderEtfTable() {
       <td class="num">${simAsset != null ? fmtMoney(simAsset) : '--'}</td>
       <td class="num">${estDiv != null ? fmtMoney(estDiv) : '--'}</td>
       <td class="action-cell">
+        <button class="btn btn-ghost btn-sm" onclick="app.fetchEtfDiv('${e.id}')">${div ? '刷新分红' : '获取分红'}</button>
         <button class="btn btn-danger btn-sm" onclick="app.removeEtf('${e.id}')">删除</button>
       </td>
     </tr>`;
