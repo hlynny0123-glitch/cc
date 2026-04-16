@@ -443,9 +443,11 @@ select.input { appearance: none; cursor: pointer; }
    ACTION CELL
 ═══════════════════════════════════════════ */
 .action-cell {
-  white-space: nowrap; display: flex; gap: 5px;
-  align-items: center; justify-content: flex-end;
+  white-space: nowrap;
+  text-align: right;
+  vertical-align: middle;
 }
+.action-cell .btn { margin-left: 4px; }
 
 /* ═══════════════════════════════════════════
    DIVIDEND YIELD BADGE
