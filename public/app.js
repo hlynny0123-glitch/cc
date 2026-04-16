@@ -393,13 +393,13 @@ function renderPieChart() {
     return { label: info?.name || p.name || p.code, value };
   }).filter(i => i.value > 0).sort((a, b) => b.value - a.value);
 
-  const COLORS = ['#58a6ff','#3fb950','#f85149','#bc8cff','#d29922','#39d353','#ff7b72','#a5d6ff'];
+  const COLORS = ['#CF6830','#E8883A','#1D7D4F','#B07D2E','#3D7CC9','#8B5CF6','#C23B35','#2D9E7A'];
   if (charts.pie) charts.pie.destroy();
   charts.pie = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: items.map(i => i.label),
-      datasets: [{ data: items.map(i => i.value), backgroundColor: COLORS, borderWidth: 0, borderRadius: 4 }],
+      datasets: [{ data: items.map(i => i.value), backgroundColor: COLORS, borderWidth: 0, borderRadius: 5 }],
     },
     options: {
       indexAxis: 'y',
@@ -409,8 +409,8 @@ function renderPieChart() {
         tooltip: { callbacks: { label: ctx => ` ¥ ${fmt(ctx.raw)}` } },
       },
       scales: {
-        x: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 }, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
-        y: { grid: { color: '#21262d' }, ticks: { color: '#e6edf3', font: { size: 11 } } },
+        x: { grid: { color: 'rgba(28,23,20,.06)' }, ticks: { color: '#8C8078', font: { size: 10 }, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
+        y: { grid: { display: false }, ticks: { color: '#4A4440', font: { size: 11 } } },
       },
     },
   });
@@ -436,14 +436,14 @@ function renderDivChart() {
     type: 'bar',
     data: {
       labels,
-      datasets: [{ label: '税后股息 (¥)', data: values, backgroundColor: 'rgba(88,166,255,.5)', borderColor: '#58a6ff', borderWidth: 1, borderRadius: 4 }],
+      datasets: [{ label: '税后股息 (¥)', data: values, backgroundColor: 'rgba(207,104,48,.7)', borderColor: '#CF6830', borderWidth: 0, borderRadius: 5 }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ¥ ${fmt(ctx.raw)}` } } },
       scales: {
-        x: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 } } },
-        y: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 }, callback: v => '¥' + v.toLocaleString() } },
+        x: { grid: { display: false }, ticks: { color: '#8C8078', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(28,23,20,.06)' }, ticks: { color: '#8C8078', font: { size: 10 }, callback: v => '¥' + v.toLocaleString() } },
       },
     },
   });
@@ -464,20 +464,20 @@ function renderNavChart() {
     data: {
       labels,
       datasets: [
-        { label: '持仓市值', data: values, borderColor: '#58a6ff', backgroundColor: 'rgba(88,166,255,.1)', borderWidth: 2, pointRadius: 2, fill: true, tension: 0.3 },
-        { label: '持仓成本', data: costs,  borderColor: '#7d8590', backgroundColor: 'transparent',         borderWidth: 1, pointRadius: 0, borderDash: [4, 4], tension: 0.3 },
+        { label: '持仓市值', data: values, borderColor: '#CF6830', backgroundColor: 'rgba(207,104,48,.08)', borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, fill: true, tension: 0.4 },
+        { label: '持仓成本', data: costs,  borderColor: '#D5CAC0', backgroundColor: 'transparent',          borderWidth: 1, pointRadius: 0, borderDash: [4, 4], tension: 0.4 },
       ],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { labels: { color: '#7d8590', font: { size: 11 }, boxWidth: 14 } },
+        legend: { labels: { color: '#8C8078', font: { size: 11 }, boxWidth: 12 } },
         tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ¥ ${fmt(ctx.raw)}` } },
       },
       scales: {
-        x: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 }, maxTicksLimit: 12 } },
-        y: { grid: { color: '#21262d' }, ticks: { color: '#7d8590', font: { size: 10 }, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
+        x: { grid: { display: false }, ticks: { color: '#8C8078', font: { size: 10 }, maxTicksLimit: 12 } },
+        y: { grid: { color: 'rgba(28,23,20,.05)' }, ticks: { color: '#8C8078', font: { size: 10 }, callback: v => '¥' + (v / 10000).toFixed(1) + 'w' } },
       },
     },
   });
