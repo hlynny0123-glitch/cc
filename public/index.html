@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Firenote</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
@@ -12,12 +15,12 @@
 <!-- ═══════════════════════ HEADER ═══════════════════════ -->
 <header class="header">
   <div class="header-left">
-    <span class="logo">📈</span>
-    <h1>Firenote</h1>
+    <div class="logo-mark">F</div>
+    <span class="logo-text">Firenote</span>
     <span id="market-badge" class="badge badge-closed">休市</span>
   </div>
   <div class="header-right">
-    <span id="last-updated" class="text-muted">--</span>
+    <span id="last-updated" class="last-updated">--</span>
     <button id="btn-refresh" class="btn btn-ghost" onclick="app.refresh()">⟳ 刷新</button>
     <button class="btn btn-primary" onclick="app.openAddStock()">+ 添加股票</button>
   </div>

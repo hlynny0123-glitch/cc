@@ -54,6 +54,10 @@ function fmt(n, dec = 2) {
   if (n == null || isNaN(n)) return '--';
   return n.toLocaleString('zh-CN', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
+function fmtPrice(n, dec = 2) {
+  if (n == null || isNaN(n)) return '--';
+  return '¥\u202F' + n.toLocaleString('zh-CN', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
 function fmtMoney(n) {
   if (n == null || isNaN(n)) return '¥ --';
   const prefix = n < 0 ? '-¥ ' : '¥ ';
@@ -311,10 +315,10 @@ function renderPortfolioTable() {
         <div class="stock-name">${name} ${alertTag}</div>
         <div class="stock-code">${pos.code.toUpperCase()}</div>
       </td>
-      <td class="num">${price !== '--' ? fmt(price) : '--'}</td>
+      <td class="num">${price !== '--' ? fmtPrice(price) : '--'}</td>
       <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
       <td class="num">${pos.shares.toLocaleString()}</td>
-      <td class="num">${fmt(pos.costPrice)}</td>
+      <td class="num">${fmtPrice(pos.costPrice)}</td>
       <td class="num">${value != null ? fmtMoney(value) : '--'}</td>
       <td class="num ${pnlClass(pnl)}">${pnl != null ? fmtMoney(pnl) + '<br><small>' + fmtPct(pnlPct) + '</small>' : '--'}</td>
       <td class="num ${pnlClass(todayPnl)}">${todayPnl != null ? fmtMoney(todayPnl) : '--'}</td>
@@ -930,9 +934,9 @@ function renderWatchlistTable() {
         <div class="stock-name">${w.name || w.code}</div>
         <div class="stock-code">${w.code.toUpperCase()}</div>
       </td>
-      <td class="num">${price ? fmt(price) : '--'}</td>
+      <td class="num">${price ? fmtPrice(price) : '--'}</td>
       <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
-      <td class="num">${div ? fmt(div, 4) : '--'}</td>
+      <td class="num">${div ? fmtPrice(div, 4) : '--'}</td>
       <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '--'}</td>
       <td class="num">
         <input type="number" class="inline-input" value="${w.simShares || ''}"
@@ -1133,7 +1137,7 @@ function renderEtfTable() {
         <div class="stock-name">${e.name || e.code}</div>
         <div class="stock-code">${e.code.toUpperCase()}</div>
       </td>
-      <td class="num">${price ? fmt(price) : '--'}</td>
+      <td class="num">${price ? fmtPrice(price) : '--'}</td>
       <td class="num ${changeClass(pct)}">${fmtPct(pct)}</td>
       <td class="num">
         <input type="number" class="inline-input" value="${div || ''}"
