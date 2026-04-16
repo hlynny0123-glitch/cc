@@ -58,6 +58,7 @@ All application state is stored exclusively in **`localStorage`**. There is no s
 | `GET /api/search?q=茅台` | `suggest3.sinajs.cn` | Stock name/code autocomplete. GBK-encoded. Response variable is named `suggestdata` (not `suggestvalue`). Fields per item: `[0]=shortname, [1]=type(11=SH/12=SZ), [2]=code6, [3]=exchange_code(sh600519), [4]=fullname`. Returns `[{name, code, type}]`. |
 | `GET /api/market-status` | Local | Returns `{open: bool}` based on Beijing time (UTC+8). Market hours: 9:25–11:30 and 13:00–15:00 on weekdays. |
 | `GET /api/dividend/:code` | `basic.10jqka.com.cn` | Per-share dividend history. Returns `{perShare, latestDate, count, distributions: [{perShare, date}]}`. See scraping note below. |
+| `GET /api/etf-dividend/:code` | `fundf10.eastmoney.com` | ETF per-unit dividend. Scrapes `fhsp_{code6}.html`. Parses table rows for `每份派现金X元` + date; sums distributions within last 12 months. Fallback: `累计分红X元/份` annual label. Returns `{perShare, latestDate, count, distributions}`. Must call `request.end()` (uses `https.request`, not `https.get`). |
 
 A simple in-memory `Map` cache with 10-second TTL is applied to `/api/stocks`.
 
@@ -79,7 +80,7 @@ All HTML `onclick` handlers call `app.functionName()`. The global `const app = {
 
 **Stock search autocomplete**: used in both "添加股票" (portfolio) and "添加关注" (watchlist) modals. Both use the same `/api/search` endpoint but separate state variables (`_searchResults` / `_watchSearchResults`). On selection, the exchange-prefixed code is stored in a hidden input field and a confirmation badge is shown.
 
-**Dividend auto-fetch flow**: clicking "自动获取" in the edit modal calls `/api/dividend/:code`, immediately saves `expectedDivPerShare` to the portfolio item, and auto-imports any new `distributions` entries into the `dividends` array (skipping duplicates by code+date). The user does not need to click "保存" for the fetch to take effect. Same logic applies when adding a watchlist stock — dividend is fetched automatically on add.
+**Dividend auto-fetch flow**: clicking "自动获取" in the edit modal calls `/api/dividend/:code`, immediately saves `expectedDivPerShare` to the portfolio item, and auto-imports any new `distributions` entries into the `dividends` array (skipping duplicates by code+date). The user does not need to click "保存" for the fetch to take effect. Same logic applies when adding a watchlist stock — dividend is fetched automatically on add. Same logic applies when adding an ETF — `/api/etf-dividend/:code` is called automatically and saves `divPerUnit`.
 
 **Dividend estimate vs historical yield**:
 - `预估年股息` column: `expectedDivPerShare × shares × expectedTaxRate` — forward-looking estimate.
@@ -98,6 +99,31 @@ All HTML `onclick` handlers call `app.functionName()`. The global `const app = {
 5. **关注列表** — watchlist table with columns: 代码/名称, 现价, 涨跌幅, 每股年股息, 股息率, 模拟持股数 (inline editable), 模拟总资产 (price × simShares), 预估年股息, 操作; bottom summary shows total simulated dividend
 6. **股息记录** — historical dividend entries, import/export CSV
 7. **预警记录** — alert log
+
+## ETF Section (`etfList`)
+
+State shape: `{ id, code, name, divPerUnit, simUnits }`. Stored in `localStorage` as `etfList`.
+
+- `divPerUnit` — annual dividend per unit (fetched from `/api/etf-dividend/:code`)
+- `simUnits` — simulated unit count (inline editable)
+- Auto-fetches dividend via `/api/etf-dividend/:code` when ETF is added
+- "获取分红" / "刷新分红" button is in the **action cell** (not inside the dividend column)
+- Table columns: 代码/名称, 现价, 涨跌幅, 年分红/份 (inline input), 股息率, 模拟份数 (inline input), 模拟总资产, 预估年分红, 操作
+
+## ETF Dividend Auto-Fetch (`/api/etf-dividend/:code`)
+
+Scrapes `https://fundf10.eastmoney.com/fhsp_{code6}.html` (UTF-8). Uses `https.request()` — **must call `request.end()`** to actually send the request (unlike `https.get()` which sends automatically).
+
+Row format in the dividend table: `<tr><td>2026年</td><td>权益登记日</td><td>除息日</td><td>每份派现金0.1230元</td><td>发放日</td></tr>`
+
+Parsing logic:
+1. Find all `<tr>` rows containing `每份派现金X元`
+2. Extract amount via `/每份派现金([\d.]+)元/`
+3. Extract date (first `YYYY-MM-DD` in the row)
+4. Sum distributions within last 12 months → `perShare`
+5. Fallback: match `/(\d{4})年度.*?累计分红([\d.]+)元\/份/g` (note: use `.*?` not `[^<]*` because there's an `<a>` tag between 年度 and 累计分红)
+
+Error handlers use `if (!res.headersSent)` guard to prevent double-send after socket close.
 
 ## Stock Code Conventions
 

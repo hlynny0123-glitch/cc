@@ -443,7 +443,8 @@ select.input { appearance: none; cursor: pointer; }
    ACTION CELL
 ═══════════════════════════════════════════ */
 .action-cell {
-  white-space: nowrap; display: flex; gap: 5px; align-items: center;
+  white-space: nowrap; display: flex; gap: 5px;
+  align-items: center; justify-content: flex-end;
 }
 
 /* ═══════════════════════════════════════════

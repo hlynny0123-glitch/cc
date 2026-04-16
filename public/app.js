@@ -325,9 +325,9 @@ function renderPortfolioTable() {
       <td class="num">${divYield != null ? `<span class="div-yield">${fmt(divYield)}%</span>` : '<span class="text-muted">--</span>'}</td>
       <td class="num">${estAnnual != null ? `<span class="div-yield">${fmtMoney(estAnnual)}</span>` : '<span class="text-muted">--</span>'}</td>
       <td class="action-cell">
-        <button class="btn btn-ghost btn-sm" onclick="app.openEditStock('${pos.id}')">编辑</button>
-        <button class="btn btn-ghost btn-sm" onclick="app.openSetAlert('${pos.code}', '${name}')">预警</button>
-        <button class="btn btn-danger btn-sm" onclick="app.removeStock('${pos.id}')">删除</button>
+        <button class="btn btn-ghost btn-xs" onclick="app.openEditStock('${pos.id}')">编辑</button>
+        <button class="btn btn-ghost btn-xs" onclick="app.openSetAlert('${pos.code}', '${name}')">预警</button>
+        <button class="btn btn-danger btn-xs" onclick="app.removeStock('${pos.id}')">删除</button>
       </td>
     </tr>`;
   }).join('');
@@ -346,7 +346,7 @@ function renderDividendTable() {
       <td class="num">${fmt(d.perShare, 4)}</td>
       <td class="num">${d.shares.toLocaleString()}</td>
       <td class="num pnl-positive">${fmtMoney(d.total)}</td>
-      <td><button class="btn btn-danger btn-sm" onclick="app.removeDividend('${d.id}')">删除</button></td>
+      <td><button class="btn btn-danger btn-xs" onclick="app.removeDividend('${d.id}')">删除</button></td>
     </tr>`).join('');
 }
 
@@ -946,8 +946,8 @@ function renderWatchlistTable() {
       <td class="num">${simAsset != null ? fmtMoney(simAsset) : '--'}</td>
       <td class="num">${estDiv != null ? fmtMoney(estDiv) : '--'}</td>
       <td class="action-cell">
-        <button class="btn btn-ghost btn-sm" onclick="app.fetchWatchDiv('${w.id}')">${div ? '刷新股息' : '获取股息'}</button>
-        <button class="btn btn-danger btn-sm" onclick="app.removeWatch('${w.id}')">删除</button>
+        <button class="btn btn-ghost btn-xs" onclick="app.fetchWatchDiv('${w.id}')">${div ? '刷新股息' : '获取股息'}</button>
+        <button class="btn btn-danger btn-xs" onclick="app.removeWatch('${w.id}')">删除</button>
       </td>
     </tr>`;
   }).join('');
@@ -1153,8 +1153,8 @@ function renderEtfTable() {
       <td class="num">${simAsset != null ? fmtMoney(simAsset) : '--'}</td>
       <td class="num">${estDiv != null ? fmtMoney(estDiv) : '--'}</td>
       <td class="action-cell">
-        <button class="btn btn-ghost btn-sm" onclick="app.fetchEtfDiv('${e.id}')">${div ? '刷新分红' : '获取分红'}</button>
-        <button class="btn btn-danger btn-sm" onclick="app.removeEtf('${e.id}')">删除</button>
+        <button class="btn btn-ghost btn-xs" onclick="app.fetchEtfDiv('${e.id}')">${div ? '刷新分红' : '获取分红'}</button>
+        <button class="btn btn-danger btn-xs" onclick="app.removeEtf('${e.id}')">删除</button>
       </td>
     </tr>`;
   }).join('');
