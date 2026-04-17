@@ -442,12 +442,11 @@ select.input { appearance: none; cursor: pointer; }
 /* ═══════════════════════════════════════════
    ACTION CELL
 ═══════════════════════════════════════════ */
-.action-cell {
-  white-space: nowrap;
-  text-align: right;
-  vertical-align: middle;
+.action-cell { white-space: nowrap; vertical-align: middle; }
+.action-btns {
+  display: inline-flex; align-items: center; gap: 4px;
+  justify-content: flex-end;
 }
-.action-cell .btn { margin-left: 4px; }
 
 /* ═══════════════════════════════════════════
    DIVIDEND YIELD BADGE
